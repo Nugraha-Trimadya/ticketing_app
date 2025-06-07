@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:heroicons/heroicons.dart';
+import 'package:google_fonts/google_fonts.dart';
+
 import 'package:ticketing_app/views/receipt.dart';
 
 class PaymentScreen extends StatelessWidget {
@@ -10,6 +12,29 @@ class PaymentScreen extends StatelessWidget {
     super.key,
     required this.ticketData,
   });
+
+  String _formatDate(DateTime date) {
+    final Map<int, String> monthNames = {
+      1: 'Jan',
+      2: 'Feb',
+      3: 'Mar',
+      4: 'Apr',
+      5: 'Mei',
+      6: 'Jun',
+      7: 'Jul',
+      8: 'Agu',
+      9: 'Sep',
+      10: 'Okt',
+      11: 'Nov',
+      12: 'Des',
+    };
+    return '${date.day} ${monthNames[date.month]} ${date.year}';
+  }
+
+  String _formatCurrency(int amount) {
+    return 'Rp ${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}';
+  }
+
   void _navigateToPaymentReceipt(BuildContext context) {
     Navigator.pop(context); // Close the dialog first
     Navigator.pushReplacement(
@@ -98,10 +123,25 @@ class PaymentScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('Pembayaran'),
-        backgroundColor: const Color(0xFF2563EB),
-        foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF1F2937)),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+        title: Text(
+          'Pembayaran',
+          style: GoogleFonts.poppins(
+            color: const Color(0xFF1F2937),
+            fontWeight: FontWeight.w600,
+            fontSize: 18,
+          ),
+        ),
+        backgroundColor: Colors.grey[50],
+        centerTitle: true,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -109,9 +149,10 @@ class PaymentScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Payment Total Section
+              // Card Total Tagihan
               Container(
-                padding: const EdgeInsets.all(16),
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
@@ -119,50 +160,53 @@ class PaymentScreen extends StatelessWidget {
                     BoxShadow(
                       color: Colors.grey.withOpacity(0.1),
                       spreadRadius: 1,
-                      blurRadius: 4,
+                      blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
                   ],
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Payment Icon
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.payment_rounded,
-                        color: Color(0xFF2563EB),
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    // Payment Details
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Total Tagihan',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
+                    Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE0E7FF),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Rp ${NumberFormat('#,###').format(ticketData['price'] ?? 0).replaceAll(',', '.')}',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF2563EB),
-                            ),
+                          child: const Icon(
+                            Icons.payment_rounded,
+                            color: Color(0xFF3730A3),
+                            size: 20,
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Total Tagihan',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF6B7280),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _formatCurrency(ticketData['price'] ?? 0),
+                              style: GoogleFonts.poppins(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF1F2937),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -226,7 +270,7 @@ class PaymentScreen extends StatelessWidget {
                           style: TextStyle(color: Colors.grey),
                         ),
                         Text(
-                          DateFormat.yMMMMd('id_ID').format(DateTime.now()),
+                          _formatDate(DateTime.now()),
                           style: const TextStyle(fontWeight: FontWeight.w500),
                         ),
                       ],
