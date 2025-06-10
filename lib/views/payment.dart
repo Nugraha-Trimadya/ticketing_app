@@ -2,19 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
-
+import 'package:ticketing_app/services/firebase.dart';
 import 'package:ticketing_app/views/receipt.dart';
 
 class PaymentScreen extends StatelessWidget {
   final Map<String, dynamic> ticketData;
-
-  const PaymentScreen({
-    super.key,
+  final FirebaseServices _firebaseServices = FirebaseServices();
+  PaymentScreen({
+    Key? key,
     required this.ticketData,
-  });
+  }) : super(key: key);
 
   String _formatDate(DateTime date) {
-    final Map<int, String> monthNames = {
+    final monthNames = <int, String>{
       1: 'Jan',
       2: 'Feb',
       3: 'Mar',
@@ -35,41 +35,137 @@ class PaymentScreen extends StatelessWidget {
     return 'Rp ${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}';
   }
 
-  void _navigateToPaymentReceipt(BuildContext context) {
-    Navigator.pop(context); // Close the dialog first
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => BuktiPembayaranPage(ticketData: ticketData),
-      ),
-    );
+  Future<void> _navigateToPaymentReceipt(BuildContext context) async {
+    try {
+      // Prepare purchase data
+      final purchaseData = {
+        'title': ticketData['title'],
+        'type': ticketData['type'],
+        'price': ticketData['price'],
+        'purchaseDate': DateTime.now(),
+      };
+
+      // Save to Firestore
+      await _firebaseServices.savePurchase(purchaseData);
+
+      // Show success message
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Pembayaran berhasil disimpan'),
+            backgroundColor: Color(0xFF12B76A),
+            duration: Duration(seconds: 2),
+          ),
+        );
+
+        // Navigate to receipt page
+        Navigator.pop(context);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => BuktiPembayaranPage(ticketData: ticketData),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal menyimpan pembayaran: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildPaymentContent(BuildContext context, String imagePath,
       String title, String description) {
+    final transactionCode = title.contains('Kartu')
+        ? 'TRX${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}'
+        : '';
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        const SizedBox(height: 20),
         Image.asset(
           imagePath,
           height: 180,
           fit: BoxFit.contain,
         ),
         const SizedBox(height: 20),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+        if (title.contains('Kartu'))
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    transactionCode,
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: transactionCode));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Kode transaksi berhasil disalin'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.copy,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Salin',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          textAlign: TextAlign.center,
-        ),
         const SizedBox(height: 12),
         Text(
           description,
-          style: const TextStyle(
+          style: GoogleFonts.poppins(
             fontSize: 14,
-            color: Colors.grey,
+            color: Colors.grey[600],
           ),
           textAlign: TextAlign.center,
         ),
@@ -84,7 +180,12 @@ class PaymentScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: const Text('Konfirmasi Pembayaran'),
+          child: Text(
+            'Konfirmasi Pembayaran',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
       ],
     );
@@ -104,19 +205,91 @@ class PaymentScreen extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          child: SingleChildScrollView(
+          child: Container(
+            padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  child: content,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1F2937),
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).pop();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          size: 20,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 20),
+                content,
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildPaymentMethodButton({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[200]!),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: const Color(0xFF2563EB)),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const Spacer(),
+              const Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+                color: Colors.grey,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -149,7 +322,7 @@ class PaymentScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Card Total Tagihan
+              // Combined Total Tagihan and Order Details Card
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
@@ -168,6 +341,7 @@ class PaymentScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Total Tagihan Section
                     Row(
                       children: [
                         Container(
@@ -208,72 +382,64 @@ class PaymentScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
 
-              const SizedBox(height: 24),
+                    const SizedBox(height: 20),
+                    const Divider(height: 1, color: Colors.grey),
+                    const SizedBox(height: 16),
 
-              // Order Details Section
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
-                      spreadRadius: 1,
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
+                    // Order Details Section
                     // Order Name
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Nama Pesanan',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                        Text(
-                          ticketData['title'] ?? 'N/A',
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Nama Pesanan',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                          Text(
+                            ticketData['title'] ?? 'N/A',
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 12),
+
                     // Ticket Type
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Tipe Tiket',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                        Text(
-                          ticketData['type'] ?? 'N/A',
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Tipe Tiket',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                          Text(
+                            ticketData['type'] ?? 'N/A',
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 12),
+
                     // Purchase Date
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Tanggal Pembelian',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                        Text(
-                          _formatDate(DateTime.now()),
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Tanggal Pembelian',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                          Text(
+                            _formatDate(DateTime.now()),
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -395,47 +561,6 @@ class PaymentScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPaymentMethodButton({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey[200]!),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: const Color(0xFF2563EB)),
-              const SizedBox(width: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              const Icon(
-                Icons.arrow_forward_ios,
-                size: 16,
-                color: Colors.grey,
               ),
             ],
           ),
